@@ -83,4 +83,18 @@ if uploaded_file:
             col_turno = 'Turno' if 'Turno' in df_filtrado.columns else 'TurnoOriginal'
             
             if col_turno in df_filtrado.columns:
-                fig_pie = px.pie(df_filtrado, names=col_turno, values='
+                # ESTA ES LA LÍNEA QUE SE CORTÓ ANTES:
+                fig_pie = px.pie(df_filtrado, names=col_turno, values='Estudiantes', title="Alumnos por Turno", hole=0.4)
+                st.plotly_chart(fig_pie, use_container_width=True)
+            else:
+                st.info(f"No encontré la columna de Turno (busqué 'Turno' o 'TurnoOriginal').")
+
+        # 5. Tabla de Datos Detallada
+        st.subheader("Detalle de Cursos")
+        st.dataframe(df_filtrado, use_container_width=True)
+    else:
+        st.warning("No hay datos para mostrar con los filtros seleccionados.")
+
+else:
+    # Mensaje de bienvenida cuando no hay archivo
+    st.info("👋 Hola Christopher. Sube el archivo Excel en el menú de la izquierda para comenzar.")
