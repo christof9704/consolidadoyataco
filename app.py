@@ -48,7 +48,19 @@ if uploaded_file:
     col3.metric("Sedes Filtradas", len(sedes_sel))
 
     st.markdown("---")
-
+    
+# --- DASHBOARD GENERAL ---
+    col1, col2, col3 = st.columns(3)
+    
+    # Usamos nombres consistentes para las variables
+    total_estudiantes = df['Estudiantes'].sum() if 'Estudiantes' in df.columns else 0
+    total_cursos = len(df)
+    sedes_activas = len(sedes_sel)
+    
+    # Aquí es donde estaba el error: ahora los nombres coinciden
+    col1.metric("Total Estudiantes", total_estudiantes)
+    col2.metric("Cursos Activos", total_cursos)
+    col3.metric("Sedes Filtradas", sedes_activas)
     # --- GRÁFICOS ---
     g1, g2 = st.columns(2)
 
