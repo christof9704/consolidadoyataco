@@ -1,86 +1,150 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 
-# --- CONFIGURACIÓN DE LA PÁGINA ---
-st.set_page_config(page_title="Dashboard Yataco Academy", layout="wide")
+# --- CONFIGURACIÓN E IDENTIDAD VISUAL ---
+st.set_page_config(page_title="Panel Académico Yataco", layout="wide", initial_sidebar_state="expanded")
 
-st.title("📊 Sistema de Gestión Académica - Yataco Academy")
-st.markdown("---")
+# Colores del código React
+COLORS = {
+    'primary': '#2563eb',
+    'success': '#10b981',
+    'warning': '#f59e0b',
+    'danger': '#ef4444',
+    'shifts': {
+        'Mañana': '#fbbf24',
+        'Tarde': '#F97316',
+        'Noche': '#1e3a8a',
+        'Sin Turno': '#cbd5e1'
+    }
+}
+
+# Estilo CSS para imitar las tarjetas de React
+st.markdown("""
+    <style>
+    .kpi-card {
+        background-color: white;
+        padding: 20px;
+        border-radius: 15px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        text-align: center;
+    }
+    .sede-card {
+        background-color: white;
+        padding: 15px;
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        margin-bottom: 20px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+st.title("🚀 Panel Académico - Yataco Academy")
+st.caption("Gestión inteligente de sedes, turnos y programaciones")
 
 # --- CARGA DE DATOS ---
-st.sidebar.header("Carga de Datos")
-uploaded_file = st.sidebar.file_uploader("Sube tu Excel aquí", type=["xlsx", "csv"])
+uploaded_file = st.sidebar.file_uploader("📂 Sube tu base de datos", type=["xlsx", "csv"])
 
 if uploaded_file:
-    try:
-        # 1. Leer el archivo
-        if uploaded_file.name.endswith('.csv'):
-            df = pd.read_csv(uploaded_file)
-        else:
-            df = pd.read_excel(uploaded_file)
-            
-        # Limpiar nombres de columnas
-        df.columns = [c.strip() for c in df.columns]
+    # Procesamiento inicial
+    df = pd.read_excel(uploaded_file) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file)
+    df.columns = [c.strip() for c in df.columns]
 
-        # 2. INTELIGENCIA DE COLUMNAS (Ajuste para el formato de Christopher)
-        # Extraer SEDE desde la columna 'Período' (Ej: "VIRTUAL - I_25" -> "VIRTUAL")
-        if 'Período' in df.columns:
-            df['SEDE_EXTRAIDA'] = df['Período'].str.split(' - ').str[0]
-        else:
-            df['SEDE_EXTRAIDA'] = "Sin Sede"
+    # Lógica de limpieza igual al React
+    if 'Período' in df.columns:
+        df['Sede'] = df['Período'].str.split(' - ').str[0]
+    
+    if 'Sede - turno' in df.columns:
+        def extract_turno(val):
+            val = str(val).lower()
+            if 'mañana' in val: return 'Mañana'
+            if 'tarde' in val: return 'Tarde'
+            if 'noche' in val: return 'Noche'
+            return 'Sin Turno'
+        df['Turno'] = df['Sede - turno'].apply(extract_turno)
 
-        # Extraer TURNO desde la columna 'Sede - turno' (Ej: "YATACO PRINCIPAL - Noche" -> "Noche")
-        if 'Sede - turno' in df.columns:
-            df['TURNO_EXTRAIDO'] = df['Sede - turno'].str.split(' - ').str[-1]
-        else:
-            df['TURNO_EXTRAIDO'] = "Sin Turno"
+    # Filtros SideBar
+    st.sidebar.markdown("---")
+    sedes_unicas = sorted(df['Sede'].unique()) if 'Sede' in df.columns else []
+    sedes_sel = st.sidebar.multiselect("📍 Filtrar Sedes", sedes_unicas, default=sedes_unicas)
+    
+    df_filtrado = df[df['Sede'].isin(sedes_sel)]
 
-        # Mapear Cupo Máximo
-        col_cupo = 'Cupo máximo' if 'Cupo máximo' in df.columns else ('Cupo' if 'Cupo' in df.columns else None)
+    # --- MÉTRICAS (Resumen General) ---
+    st.subheader("Resumen General")
+    m1, m2, m3, m4 = st.columns(4)
+    
+    total_est = df_filtrado['Estudiantes'].sum()
+    capacidad = df_filtrado['Cupo máximo'].sum() if 'Cupo máximo' in df_filtrado.columns else 1
+    ocupacion = (total_est / capacidad) * 100
 
-        # 3. FILTROS
-        st.sidebar.subheader("Filtros")
-        todas_sedes = sorted(df['SEDE_EXTRAIDA'].unique())
-        sedes_sel = st.sidebar.multiselect("Seleccionar Sedes:", todas_sedes, default=todas_sedes)
+    m1.metric("Total Estudiantes", f"{total_est:,}")
+    m2.metric("Cursos Activos", len(df_filtrado))
+    m3.metric("Ocupación Global", f"{ocupacion:.1f}%")
+    m4.metric("Sedes", len(sedes_sel))
+
+    # --- GRÁFICOS PRINCIPALES ---
+    col_left, col_right = st.columns([2, 1])
+
+    with col_left:
+        st.markdown("### Alumnos por Sede")
+        fig_sede = px.bar(
+            df_filtrado.groupby('Sede')['Estudiantes'].sum().reset_index(),
+            x='Estudiantes', y='Sede', orientation='h',
+            color_discrete_sequence=[COLORS['primary']],
+            text_auto=True
+        )
+        fig_sede.update_layout(margin=dict(l=20, r=20, t=20, b=20), height=300, plot_bgcolor='rgba(0,0,0,0)')
+        st.plotly_chart(fig_sede, use_container_width=True)
+
+    with col_right:
+        st.markdown("### Preferencia de Turnos")
+        fig_turno = px.pie(
+            df_filtrado, names='Turno', values='Estudiantes',
+            hole=0.5, color='Turno',
+            color_discrete_map=COLORS['shifts']
+        )
+        fig_turno.update_layout(margin=dict(l=10, r=10, t=10, b=10), height=300, showlegend=True)
+        st.plotly_chart(fig_turno, use_container_width=True)
+
+    # --- GRID DE SEDES (Igual al diseño de tarjetas de React) ---
+    st.markdown("---")
+    st.subheader("Módulos por Sede")
+    
+    # Creamos un grid de 3 columnas
+    cols = st.columns(3)
+    for i, sede in enumerate(sedes_sel):
+        target_col = cols[i % 3]
+        sede_data = df_filtrado[df_filtrado['Sede'] == sede]
         
-        df_filtrado = df[df['SEDE_EXTRAIDA'].isin(sedes_sel)]
+        with target_col:
+            st.markdown(f"""
+                <div class="sede-card">
+                    <h4 style="color:#1e3a8a; margin-bottom:5px;">📍 {sede}</h4>
+                    <p style="font-size:12px; color:#64748b;">{len(sede_data)} Grupos programados</p>
+                    <hr style="margin:10px 0;">
+                    <div style="display:flex; justify-content:space-between;">
+                        <span style="font-size:14px;"><b>{sede_data['Estudiantes'].sum()}</b> Alumnos</span>
+                        <span style="color:#10b981; font-weight:bold;">{((sede_data['Estudiantes'].sum() / sede_data['Cupo máximo'].sum())*100):.0f}% Ocupado</span>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
+            
+            # Mini tabla de detalles dentro de la tarjeta
+            with st.expander(f"Ver cursos en {sede}"):
+                st.dataframe(
+                    sede_data[['Asignatura', 'Turno', 'Estudiantes']], 
+                    hide_index=True, 
+                    use_container_width=True
+                )
 
-        # 4. MÉTRICAS (KPIs)
-        col1, col2, col3 = st.columns(3)
-        total_estudiantes = df_filtrado['Estudiantes'].sum() if 'Estudiantes' in df_filtrado.columns else 0
-        total_cupos = df_filtrado[col_cupo].sum() if col_cupo else 0
-        total_cursos = len(df_filtrado)
-
-        col1.metric("Total Alumnos", f"{int(total_estudiantes)}")
-        col2.metric("Total Cupos", f"{int(total_cupos)}")
-        col3.metric("Cursos Activos", f"{total_cursos}")
-
-        st.markdown("---")
-
-        # 5. GRÁFICOS
-        g1, g2 = st.columns(2)
-
-        with g1:
-            st.subheader("Alumnos por Sede")
-            if 'Estudiantes' in df_filtrado.columns:
-                datos_sede = df_filtrado.groupby('SEDE_EXTRAIDA')['Estudiantes'].sum().reset_index()
-                fig_bar = px.bar(datos_sede, x='SEDE_EXTRAIDA', y='Estudiantes', 
-                                 text_auto=True, title="Distribución por Sede",
-                                 labels={'SEDE_EXTRAIDA': 'Sede', 'Estudiantes': 'Alumnos'})
-                st.plotly_chart(fig_bar, use_container_width=True)
-
-        with g2:
-            st.subheader("Distribución por Turno")
-            fig_pie = px.pie(df_filtrado, names='TURNO_EXTRAIDO', values='Estudiantes', 
-                            title="Alumnos por Turno", hole=0.4)
-            st.plotly_chart(fig_pie, use_container_width=True)
-
-        # 6. TABLA DETALLADA
-        st.subheader("Detalle de Cursos")
-        st.dataframe(df_filtrado, use_container_width=True)
-
-    except Exception as e:
-        st.error(f"Hubo un problema al procesar los datos: {e}")
 else:
-    st.info("👋 Sube tu archivo Excel para activar el Dashboard.")
+    # Pantalla de bienvenida (Landing)
+    st.markdown("""
+        <div style="text-align: center; padding: 50px;">
+            <h1 style="color: #2563eb;">Bienvenido al Panel Yataco</h1>
+            <p>Sube tu archivo Excel para generar los reportes visuales automáticamente.</p>
+        </div>
+    """, unsafe_allow_html=True)
